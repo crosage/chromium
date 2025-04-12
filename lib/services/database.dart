@@ -46,6 +46,8 @@ class DatabaseService{
           timestamp TEXT NOT NULL,
           type TEXT NOT NULL,
           host TEXT,
+          port INTEGER,
+          user TEXT,
           command TEXT NOT NULL,
           stdout TEXT,
           stderr TEXT,
