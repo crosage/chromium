@@ -9,7 +9,6 @@ class HistoryLogTile extends StatelessWidget{
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    print(log.exitCode);
     final bool isSuccess = log.exitCode == 0;
     final Color statusColor = isSuccess ? Colors.green : Colors.red;
     return Card(

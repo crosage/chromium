@@ -196,10 +196,6 @@ class _HomeScreenState extends State<HomeScreen>{
           resultLog = await SSHService.execute( host: host, port: port, username: user, password: password, command: command.trim() );
         }
       }
-      print("**************");
-      print("$resultLog");
-      print("${resultLog!.exitCode}");
-      print("**************");
       if (resultLog != null) {
         _updateLastOutput(resultLog); // 更新上次输出区域
         if (resultLog.exitCode > -90) {

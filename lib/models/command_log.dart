@@ -46,7 +46,7 @@ class CommandLog {
 
     int? readInt(String key) => map[key] is int ? map[key] as int : null;
     String? readString(String key) => map[key] is String ? map[key] as String : null;
-    print(" map内为 ${map['exit_code']}");
+    // print(" map内为 ${map['exit_code']}");
     return CommandLog(
       id: readInt('id'),
       timestamp: DateTime.parse(map['timestamp'] as String),

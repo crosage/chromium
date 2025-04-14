@@ -51,8 +51,6 @@ class PowerShellService {
         ['-NoProfile', '-NonInteractive', '-Command', command],
         workingDirectory: workingDirectory,
         runInShell: false,
-        stdoutEncoding: utf8,
-        stderrEncoding: utf8,
       ).timeout(timeout);
       print("退出码为${processResult.exitCode}");
       logData['stdout'] = processResult.stdout as String? ?? '';
