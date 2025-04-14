@@ -188,12 +188,11 @@ class DatabaseService{
     }
   }
 
-  Future<List<String>> getDistinctCommandHistory({int limit = 100}) async {
+  Future<List<String>> getCommandHistory({int limit = 100}) async {
     try {
       final db = await database;
       final List<Map<String, dynamic>> maps = await db.query(
         logTableName,
-        distinct: true,
         columns: ['command'],
         orderBy: 'timestamp DESC',
         limit: limit,
