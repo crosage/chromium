@@ -9,6 +9,7 @@ class HistoryLogTile extends StatelessWidget{
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    print(log.exitCode);
     final bool isSuccess = log.exitCode == 0;
     final Color statusColor = isSuccess ? Colors.green : Colors.red;
     return Card(
@@ -57,6 +58,8 @@ class HistoryLogTile extends StatelessWidget{
           _buildDetailRow("时间:", log.formattedTimestamp),
           if (log.host != null) _buildDetailRow("主机:", log.host!),
           _buildDetailRow("退出码:", log.exitCode.toString(), valueColor: statusColor),
+          _buildOutputBlock(log.stdout, isEmptyText: "(无标准输出流)", backgroundColor: Colors.grey.shade100),
+          _buildOutputBlock(log.stderr, isEmptyText: "(无标准错误流)", backgroundColor: Colors.grey.shade100),
           const SizedBox(height: 12),
         ],
       ),

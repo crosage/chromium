@@ -43,6 +43,7 @@ class _HomeScreenState extends State<HomeScreen>{
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _commandFocusNode = FocusNode();
+  final ScrollController _scrollController = ScrollController();
 
   CommandType _selectedType = Platform.isWindows ? CommandType.powershell : CommandType.ssh;
   String _lastOutput="上次执行的输出...";
@@ -195,12 +196,15 @@ class _HomeScreenState extends State<HomeScreen>{
           resultLog = await SSHService.execute( host: host, port: port, username: user, password: password, command: command.trim() );
         }
       }
-
+      print("**************");
+      print("$resultLog");
+      print("${resultLog!.exitCode}");
+      print("**************");
       if (resultLog != null) {
         _updateLastOutput(resultLog); // 更新上次输出区域
         if (resultLog.exitCode > -90) {
           await _dbService.addLog(resultLog);
-          if (kDebugMode) print("日志已记录到数据库");
+          print("日志已记录到数据库");
           // 执行成功后，刷新历史列表 和 键盘导航历史
           await Future.wait([_fetchLogs(), _loadCommandHistory()]);
           _historyIndex = _commandHistory.length; // 重置索引
@@ -250,12 +254,79 @@ class _HomeScreenState extends State<HomeScreen>{
     }
     return '当前显示: ${filters.join(' | ')}';
   }
+  void _toggleCommandType() {
+    setState(() {
+      _selectedType = (_selectedType == CommandType.ssh)
+          ? CommandType.powershell
+          : CommandType.ssh;
+    });
+  }
+  Widget _buildBottomInputArea() {
+    return Material(
+      elevation: 4.0,
+      child: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Actions(
+          actions: <Type, Action<Intent>>{
+            ExecuteIntent: ExecuteAction(_executeCommand),
+          },
+          //触发器
+          child: Shortcuts(
+            shortcuts: <LogicalKeySet, Intent>{
+              LogicalKeySet(LogicalKeyboardKey.enter): const ExecuteIntent(),
+            },
+            child: Row(
+              children: [
+                IconButton(
+                  icon: Icon(_selectedType == CommandType.ssh ? Icons.lan : Icons.terminal),
+                  tooltip: _selectedType == CommandType.ssh ? '切换到 PowerShell' : '切换到 SSH',
+                  onPressed: Platform.isWindows ? _toggleCommandType : null,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Focus(
+                    focusNode: _commandFocusNode,
+                    onKeyEvent: _handleKeyEvent,
+                    child: TextField(
+                      controller: _commandController,
+                      decoration: InputDecoration(
+                        hintText: '输入 ${_selectedType.name} 命令...',
+                        isDense: true,
+                        border: const OutlineInputBorder(),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                      ),
+                      textInputAction: TextInputAction.send,
+                      onSubmitted: (_) => _executeCommand(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _isLoadingCommand
+                    ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2.5),
+                )
+                    : IconButton(
+                  icon: const Icon(Icons.send),
+                  tooltip: '执行命令',
+                  onPressed: _isLoadingCommand ? null : _executeCommand,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('命令执行与历史记录'),
+        title: const Text('powerdealer'), // Use the actual app name if different
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -265,47 +336,70 @@ class _HomeScreenState extends State<HomeScreen>{
         ],
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Actions(
-          actions: <Type, Action<Intent>>{ ExecuteIntent: ExecuteAction(_executeCommand), },
-          child: Shortcuts(
-            shortcuts: <LogicalKeySet, Intent>{ LogicalKeySet(LogicalKeyboardKey.enter): const ExecuteIntent(), },
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildCommandInputArea(),
-                const SizedBox(height: 16),
-                const Text('上次执行输出:', style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                OutputDisplay(output: _lastOutput),
-                const SizedBox(height: 16),
-                const Text('历史记录:', style: TextStyle(fontWeight: FontWeight.bold)),
-                _buildHistoryFilterControls(),
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4.0),
-                  child: Text(_buildFilterText(), style: Theme.of(context).textTheme.bodySmall),
+        padding: const EdgeInsets.only(left: 16.0, right: 16.0, top: 16.0), // Adjust padding, bottom handled by input row
+        child: Column( // Main layout: Scrollable content above, fixed input below
+          children: [
+            Expanded( // Scrollable area
+              child: SingleChildScrollView(
+                controller: _scrollController, // Assign controller
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // --- Content inside scroll view ---
+
+                    // Conditionally show SSH fields if SSH is selected
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 300),
+                      transitionBuilder: (Widget child, Animation<double> animation) {
+                        return SizeTransition(sizeFactor: animation, child: child);
+                      },
+                      child: _selectedType == CommandType.ssh
+                          ? _buildSshInputFields() // Keep SSH fields grouped
+                          : const SizedBox.shrink(key: ValueKey('no_ssh_fields')),
+                    ),
+                    if (_selectedType == CommandType.ssh) const SizedBox(height: 16),
+                    const Text('历史记录:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    _buildHistoryFilterControls(), // Search and date filters
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4.0),
+                      child: Text(_buildFilterText(), style: Theme.of(context).textTheme.bodySmall),
+                    ),
+                    if (_isLoadingHistory) const LinearProgressIndicator(),
+
+                    // History List View
+                    if (_logs.isEmpty && !_isLoadingHistory)
+                      const Padding( // Show message if empty and not loading
+                        padding: EdgeInsets.symmetric(vertical: 32.0),
+                        child: Center(child: Text('没有符合条件的记录。', style: TextStyle(color: Colors.grey))),
+                      )
+                    else
+                      ListView.separated(
+                        shrinkWrap: true, // Crucial for ListView inside SingleChildScrollView
+                        physics: const NeverScrollableScrollPhysics(), // Crucial
+                        itemCount: _logs.length,
+                        itemBuilder: (context, index) {
+                          final log = _logs[index];
+                          // Use index for key if log.id might not be unique or stable during filtering
+                          return HistoryLogTile(key: ValueKey(log.id ?? index), log: log);
+                        },
+                        separatorBuilder: (context, index) => Divider(
+                            height: 1, thickness: 0.5, color: Colors.grey[300]),
+                      ),
+
+                    const SizedBox(height: 20), // Add space at the very bottom of scroll content
+                  ],
                 ),
-                if (_isLoadingHistory) const LinearProgressIndicator(), // 历史加载指示器
-                Expanded( // 历史列表占据剩余空间
-                  child: _logs.isEmpty && !_isLoadingHistory
-                      ? const Center(child: Text('没有符合条件的记录。'))
-                      : ListView.separated(
-                    itemCount: _logs.length,
-                    itemBuilder: (context, index) {
-                      final log = _logs[index];
-                      return HistoryLogTile(key: ValueKey(log.id), log: log);
-                    },
-                    separatorBuilder: (context, index) => Divider(
-                        height: 1, thickness: 0.5, color: Colors.grey[300]),
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
+
+            // --- Fixed Bottom Input Area ---
+            _buildBottomInputArea(),
+          ],
         ),
       ),
     );
   }
+
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is KeyDownEvent || event is KeyRepeatEvent) {
       if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
@@ -318,48 +412,6 @@ class _HomeScreenState extends State<HomeScreen>{
     }
     return KeyEventResult.ignored; // 其他按键忽略，让系统或其他监听器处理
   }
-  // 构建命令输入区域的辅助方法
-  Widget _buildCommandInputArea() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SegmentedButton<CommandType>(
-          segments: <ButtonSegment<CommandType>>[
-            if (Platform.isWindows)
-              const ButtonSegment<CommandType>(value: CommandType.powershell, label: Text('PowerShell'), icon: Icon(Icons.terminal)),
-            const ButtonSegment<CommandType>(value: CommandType.ssh, label: Text('SSH'), icon: Icon(Icons.lan)),
-          ],
-          selected: <CommandType>{_selectedType},
-          onSelectionChanged: (Set<CommandType> newSelection) { setState(() => _selectedType = newSelection.first); },
-        ),
-        const SizedBox(height: 16),
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 300),
-          child: _selectedType == CommandType.ssh
-              ? _buildSshInputFields()
-              : const SizedBox.shrink(key: ValueKey('no_ssh_fields')),
-        ),
-        Focus( // 命令输入框带键盘监听
-          focusNode: _commandFocusNode,
-          onKeyEvent: _handleKeyEvent,
-          child: TextField(
-            controller: _commandController,
-            decoration: InputDecoration(labelText: _selectedType == CommandType.powershell ? '输入 PowerShell 命令' : '输入 SSH 命令'),
-            maxLines: 5,
-            minLines: 3,
-          )
-        ),
-        const SizedBox(height: 16),
-        ElevatedButton.icon( // 执行按钮
-          icon: _isLoadingCommand ? const SizedBox(/*... Loading ...*/) : const Icon(Icons.play_arrow),
-          label: Text(_isLoadingCommand ? '执行中...' : '执行命令'),
-          onPressed: _isLoadingCommand ? null : _executeCommand,
-          style: ElevatedButton.styleFrom(/* ... */),
-        ),
-      ],
-    );
-  }
-
   // 构建 SSH 输入字段的辅助方法
   Widget _buildSshInputFields() {
     return Column(
