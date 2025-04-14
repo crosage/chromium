@@ -6,7 +6,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/command_log.dart';
 import 'config.dart';
-
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class DatabaseService{
   static final DatabaseService _instance=DatabaseService._internal();
   factory DatabaseService() => _instance;

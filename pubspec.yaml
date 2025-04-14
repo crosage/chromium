@@ -38,6 +38,8 @@ dependencies:
   sqflite:
   path_provider:
   dartssh2:
+  provider:
+  sqflite_common_ffi:
 
 dev_dependencies:
   flutter_test:
